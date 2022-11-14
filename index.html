@@ -1,0 +1,286 @@
+<html>
+    <head>
+        <script>
+        
+const KeelaForms = {};
+
+KeelaForms.addLoadingBackdrop = function ({ showLoading = true } = {}) {
+    const backdrop = document.createElement('div');
+
+    backdrop.classList.add('keela-popup-backdrop');
+
+    if (showLoading) backdrop.innerHTML = `
+        <div class="keela-loading">
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+        </div>
+    `;
+
+    document.body.appendChild(backdrop);
+    document.body.classList.add('keela-overflow-hidden');
+    document.body.parentNode.classList.add('keela-overflow-hidden');
+
+    return backdrop;
+};
+
+KeelaForms.addLoadingPopupForm = function ({ src, embedId } = {}) {
+    let iframe = document.querySelector(`iframe[data-embed-id='${ embedId }']`);
+
+    if (iframe) {
+        KeelaForms.addLoadingBackdrop({ showLoading: false });
+
+        iframe.classList.remove('keela-hidden');
+
+    } else {
+        KeelaForms.addLoadingBackdrop({ showLoading: true });
+
+        iframe = document.createElement('iframe');
+
+        iframe.classList.add('keela-popup-form');
+        iframe.classList.add('keela-hidden');
+        iframe.frameBorder = 0;
+        iframe.dataset.embedId = embedId;
+        iframe.src = `${ src }?embedId=${ embedId }`;
+
+        iframe.setAttribute('allow', 'clipboard-write');
+
+        document.body.parentNode.appendChild(iframe);
+    }
+
+    return iframe;
+};
+
+KeelaForms.removeLoadingPopupForm = function ({ embedId } = {}) {
+    const iframe = document.querySelector(`iframe[data-embed-id='${ embedId }']`);
+    const backdrop = document.getElementsByClassName('keela-popup-backdrop')[ 0 ];
+
+    iframe.classList.add('keela-hidden');
+    document.body.classList.remove('keela-overflow-hidden');
+    document.body.parentNode.classList.remove('keela-overflow-hidden');
+    backdrop.remove();
+};
+
+KeelaForms.initPopupForms = function () {
+    const buttons = document.getElementsByClassName('keela-popup-button');
+    let embedId = 0;
+
+    for (const button of buttons) {
+        embedId++;
+        button.dataset.embedId = `popup_${ embedId }`;
+
+        button.onclick = function () {
+            KeelaForms.addLoadingPopupForm(button.dataset);
+        };
+    }
+};
+
+KeelaForms.initEmbeddedForms = function () {
+    const elements = document.getElementsByClassName('keela-embed-form');
+    let embedId = 0;
+
+    for (const element of elements) {
+        embedId++;
+        const id = `embed_${ embedId }`;
+
+        element.dataset.embedId = id;
+
+        const iframe = document.createElement('iframe');
+
+        iframe.classList.add('keela-hidden');
+        iframe.frameBorder = 0;
+        iframe.dataset.embedId = id;
+        iframe.src = `${ element.dataset.src }?embedId=${ id }`;
+
+        iframe.setAttribute('allow', 'clipboard-write');
+
+        element.appendChild(iframe);
+    }
+};
+
+KeelaForms.processMessage = function (event) {
+    const message = JSON.parse(event.data || event.message);
+
+    switch (message.action) {
+        case 'show': {
+            const iframe = document.querySelector(`iframe[data-embed-id='${ message.embedId }']`);
+
+            if (message.embedId.includes('popup')) {
+                const backdrop = document.getElementsByClassName('keela-popup-backdrop')[ 0 ];
+                backdrop && (backdrop.innerHTML = '');
+
+            } else if (message.embedId.includes('embed')) {
+                const element = document.querySelector(`div[data-embed-id='${ message.embedId }']`);
+                const loading = element.getElementsByClassName('keela-loading')[ 0 ];
+
+                loading && loading.remove();
+            }
+
+            return iframe.classList.remove('keela-hidden');
+        }
+
+        case 'resize': {
+            if (!message.embedId.includes('embed')) return;
+
+            const iframe = document.querySelector(`iframe[data-embed-id='${ message.embedId }']`);
+            console.log(message.height);
+            return iframe.style.setProperty('height', `${ message.height }px`);
+        }
+
+        case 'close':
+            return KeelaForms.removeLoadingPopupForm(message);
+
+        case 'redirect':
+            return (window.location.href = message.url);
+    }
+};
+
+function addMessageHandler (handler) {
+    if (!window.addEventListener) return window.attachEvent('onmessage', handler);
+    window.addEventListener('message', handler);
+}
+
+function addContentLoadedHandler (handler) {
+    if (!window.addEventListener) return window.setTimeout(handler, 1000);
+    document.readyState === 'loading'
+        ? window.addEventListener('DOMContentLoaded', handler)
+        : handler();
+}
+
+addMessageHandler(KeelaForms.processMessage);
+addContentLoadedHandler(KeelaForms.initEmbeddedForms);
+addContentLoadedHandler(KeelaForms.initPopupForms);
+
+const observer = new MutationObserver((mutations, obs) => {
+    const embedForms = document.getElementsByClassName('keela-embed-form');
+    const popupForms = document.getElementsByClassName('keela-popup-form');
+    
+    if (embedForms.length || popupForms.length) {
+        KeelaForms.initEmbeddedForms()
+        KeelaForms.initPopupForms()
+        obs.disconnect();
+    }
+});
+
+observer.observe(document.body, {
+    childList: true,
+    subtree: true
+});
+
+window.KeelaForms = KeelaForms;
+
+        </script>
+        <style>
+        
+.keela-loading {
+    display: inline-block;
+    position: relative;
+    width: 80px;
+    height: 80px;
+}
+
+.keela-loading div {
+    box-sizing: border-box;
+    display: block;
+    position: absolute;
+    width: 64px;
+    height: 64px;
+    margin: 8px;
+    border: 8px solid #cef;
+    border-radius: 50%;
+    animation: keela-loading 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+    border-color: #cef transparent transparent transparent;
+}
+
+.keela-loading div:nth-child(1) {
+    animation-delay: -0.45s;
+}
+
+.keela-loading div:nth-child(2) {
+    animation-delay: -0.3s;
+}
+
+.keela-loading div:nth-child(3) {
+    animation-delay: -0.15s;
+}
+
+@keyframes keela-loading {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.keela-hidden {
+    display: none !important;
+    opacity: 0 !important;
+}
+
+.keela-overflow-hidden {
+    overflow: hidden !important;
+}
+
+.keela-popup-backdrop {
+    display: flex !important;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.7) !important;
+    left: 0 !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    position: fixed !important;
+    z-index: 2147483646 !important;
+    transition: opacity .2s ease-in-out !important;
+    transform: translateZ(99px) !important;
+    -webkit-animation: fun-widget-backdrop .2s ease-in-out !important;
+    animation: fun-widget-backdrop .2s ease-in-out !important;
+}
+
+.keela-popup-form {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    position: fixed !important;
+    opacity: 1 !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    transform: translateZ(100px) !important;
+    z-index: 2147483647 !important;
+}
+
+.keela-embed-form {
+    display: flex !important;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    min-height: 200px;
+}
+
+.keela-embed-form iframe {
+    width: 100%;
+}
+
+        </style>
+    </head>
+    <body>
+
+        <div class="keela-embed-form" data-src="http://give.localhost:3002/embed/yymCd5M2J3RZnoRht">
+            <div class="keela-loading">
+                <div></div>
+                <div></div>
+                <div></div>
+                <div></div>
+            </div>
+        </div>
+    </body>
+</html>
